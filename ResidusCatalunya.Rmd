@@ -1,0 +1,384 @@
+---
+title: "Residus Catalunya"
+author: "Genís Bosch, Bernat Armengol"
+date: "5/10/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Descripció del dataset
+
+Treballarem amb el dataset d'estadístiques de residus municipals proporcionat per la Generalitat de Catalunya a través del portal "dades obertes Catalunya". Aquest dataset recull les estadístiques de residus municipals de Catalunya. Incorpora les quantitats de recollida selectiva per a les diferents fraccions de residus, i també els totals de recollides en termes absoluts i per càpita.
+
+Complementari a aquest dataset hi haurà la taula de municipis participants en el model de recollida selectiva porta a porta, que ens permetrà separar en dos grups les dades de residus municipals, obtenint així per una banda els municipis amb servei porta a porta i per altre els municipis amb servei de recollida selectiva a vorera.
+
+Amb aquests datasets podrem investigar l'eficiència del mètode porta a porta i avaluar si aquest aporta una clara millora sobre la tradicional recollida selectiva de vorera.
+
+# 2-3. Integració, neteja i selecció de dades d'interès a analitzar
+
+Hem obtingut dos datasets:
+Un des de la pàgina web de dades obertes de Catalunya, en el que apareixen les dades de la recollida selectiva de tots els pobles de Catalunya. Aquest es pot trobar a l'enllaç:
+https://analisi.transparenciacatalunya.cat/Medi-Ambient/Estad-stiques-de-residus-municipals/69zu-w48s
+
+L'altre, obtingut a partir d'una taula HTML a la web de Porta a Porta (https://www.portaaporta.cat/ca/municipis.php), la qual hem copiat i enganxat en un full de càlcul Excel, per a després passar a CSV i obrir amb R.
+
+En fusionar les dues taules per nom de municipi, hem trobat una quarantena de municipis escrits diferents, que hem hagut d'editar manualment en el fitxer origen. Com que les dades del fitxer "Estadístiques de residus municipals" contenen vàries entrades per a cada poble (tantes com anys registrats), hem editat el fitxer "PortaAPorta.csv", on només apareixen els domicilis que participen en la iniciativa Porta a Porta i solament ho fan un cop.
+
+```{r warning=FALSE}
+library(stringr)
+residus <- read.csv("./Estad_stiques_de_residus_municipals.csv", encoding = "UTF-8")
+portaAporta <- read.csv("./PortaAPorta.csv", encoding  = "UTF-8")
+
+portaAporta$Municipis <- tolower(portaAporta$Municipis)
+residus$Municipi <- tolower(residus$Municipi)
+
+residusR <- merge(x = residus, y = portaAporta, by.x = "Municipi", by.y="Municipis", all.x = TRUE)
+pap <- residusR[!is.na(residusR$X..població.servida.amb.el.PaP),]
+
+residusR$Municipi <- str_to_title(residusR$Municipi)
+
+con<-file('./residus_catalunya.csv',encoding="UTF-8")
+write.csv(residusR,file=con)
+
+data <- read.csv("./residus_catalunya.csv", encoding = "UTF-8")
+#head(data)
+
+```
+Ja amb els datasets fusionats, veiem que totes les poblacions que no es troben en la llista de porta a porta han obtingut NAs per a les noves columnes. 
+Aquest resultat ens és convenient, a excepció de la columna que conté el percentatge de població coberta pel mètode de recollida selectiva porta a porta. Així doncs, canviem les files les quals aquesta columna està en NA amb un 0, indicant així que no hi ha porta a porta per a ningú.
+
+Per altra banda, per als pobles que pertanyen a la iniciativa porta a porta, a partir de la data d'inici de recollida porta a porta (que és diferent per cada municipi) avaluem si l'any en qüestió el municipi estava utilitzant la recollida selectiva de vorera o la porta a porta, i li assignem el seu percentatge de població coberta en cas de porta a porta, un 0 en cas de vorera i un NA en cas del mateix any, ja que les dades són anuals i no podríem determinar les porcions de residus que s'han tractat amb un mètode i l'altre dins l'any de canvi de mètode. Aquestes entrades amb NA no les tindrem en compte per a l'anàlisi.
+
+Aprofitem també per a reduir la informació de la fracció de residus que es recullen en el porta a porta, quedant-nos només amb el nombre de materials diferents que es recullen i obtenint així una columna de tipus enter que pot variar entre 0 i 5.
+
+```{r warning=FALSE}
+library(stringr)
+data$X..població.servida.amb.el.PaP <- as.numeric(data$X..població.servida.amb.el.PaP)
+
+for (i in 1:nrow(data)) {
+  if(is.na(data$X..població.servida.amb.el.PaP[i]) || data$X..població.servida.amb.el.PaP[i] == 'NA'){
+    data$X..població.servida.amb.el.PaP[i] = 0
+  }
+  else {
+    if (as.integer(str_sub(data$X.U.FEFF.Data.d.inici[i], -4, -1)) > data$Any[i]){
+      data$X..població.servida.amb.el.PaP[i] = 0
+    }
+    else if (as.integer(str_sub(data$X.U.FEFF.Data.d.inici[i], -4, -1)) == data$Any[i]){
+      data$X..població.servida.amb.el.PaP[i] = NA
+    }
+  }
+}
+
+data <- data[which(!is.na(data$X..població.servida.amb.el.PaP)),]
+
+for (i in 1:nrow(data)) {
+  if (!is.na(data$Fraccions.recollides.PaP[i])){
+    data$Fraccions.recollides.PaP[i] = as.integer(str_sub(data$Fraccions.recollides.PaP[i], 1, 2))
+  }
+}
+
+data$Piles <- as.numeric(gsub(",", ".", data$Piles))
+
+#head(data)
+```
+
+Decidim utilitzar les dimensions Municipi, Any, Comarca, Població i Percentatge de Població amb Porta a Porta (PaP per a descriure les files i poder fer les seleccions dels grups, i com a mètriques d'interès ens quedem amb les tones de residus de paper i cartró, vidre, envasos i piles obtingudes anualment, així com els kg de residus per habitant i per any de recollida selectiva, els kg de residus per habitant i per any totals, la proporció de residus de recollida selectiva sobre recollida total, el total en tones de residus restants no recollits selectivament, el model de recollida selectiva i les fraccions (materials) que es recullen amb el servei Porta a Porta(en cas de tenir-lo).
+
+```{r}
+interestData <- subset(data, select = c(Municipi, Any, Comarca, Població, Paper.i.cartró, Vidre, 
+                                        Envasos.lleugers,Piles, Kg.hab.any.recollida.selectiva,
+                                        R.S....R.M....total, Suma.Fracció.Resta,
+                                        Kg...hab...any, Model.RS.FORM.domiciliaria, 
+                                        X..població.servida.amb.el.PaP,   Fraccions.recollides.PaP))
+
+colnames(interestData) <- c("Municipi", "Any", "Comarca", "Població", "paper_cartro", "vidre", 
+                          "envasos", "piles", "kg_hab_any_recollida", "rs_rm", "suma_fraccio_resta", 
+                          "kg_hab_any", "model_rs", "percentatge_poblacio_pap", "fraccions_pap" )
+
+con<-file('./residus_catalunya_net.csv',encoding="UTF-8")
+write.csv(interestData,file=con)
+
+data <- read.csv("./residus_catalunya_net.csv", encoding = "UTF-8")
+#(data)
+```
+Per a poder tenir una comparació entre municipis, decidim obtenir les variables quantitatives per càpita en comptes de totals, pel que aquestes les dividim entre el nombre d'habitants.
+
+A més, en aquesta etapa veiem que apareixen entrades "No Territorialitzables", que decidim no tenir en compte per a l'anàlisi.
+
+Finalment, hem creat una variable nova 'proporcio' que representa la proporció de kgs de recollida respecte els kgs de rebuig total per càpita i any, en la qual fem la neteja de les dades corresponent. Aquesta variable tindrà un paper molt important en l'estudi.
+
+```{r}
+data$paper_cartro <- data$paper_cartro * 1000/data$Població
+data$vidre <- data$vidre * 1000/data$Població
+data$envasos <- data$envasos * 1000/data$Població
+data$piles <- data$piles * 1000/data$Població
+data$suma_fraccio_resta <- data$suma_fraccio_resta * 1000/data$Població
+
+data <- data[which(!is.na(data$Municipi)),]
+data <- data[which(!(data$Municipi == "No Territorialitzable")),]
+
+data$proporcio <- data$kg_hab_any_recollida/data$kg_hab_any
+data <- data[which(!is.na(data$proporcio)),]
+
+head(data)
+```
+
+### 3.2 Identificació i tractament de valors extrems
+
+En aquest apartat, primerament analitzarem totes les mètriques d'interès quantitatives mitjançant el gràfic boxplot. D'aquesta manera, podem fer un primer anàlisi visual per identificar valors extrems.
+
+A més a més, mitjançant la funció summary fem un breu anàlisi de les principals característiques descriptives per cada una d'elles.
+
+```{r}
+
+boxplot(x = subset(data, select = c("paper_cartro", "vidre", "envasos", "piles")))
+boxplot(x = data$rs_rm)
+boxplot(x = subset(data, select = c("kg_hab_any_recollida", "suma_fraccio_resta", "kg_hab_any")))
+
+summary(data)
+
+out <- boxplot.stats(data$envasos)$out
+negatiu <- min(data$envasos)
+if (negatiu %in% out) { 
+  print("Fora del boxplot")
+} else { 
+  print("Dins el boxplot") 
+}
+#Eliminem el negatiu
+data <- data[which(data$envasos >= 0), ]
+
+maxs <- data[data$paper_cartro == max(data$paper_cartro),]
+maxs <- rbind(maxs, data[data$envasos == max(data$envasos),])
+maxs <- rbind(maxs, data[data$vidre == max(data$vidre),])
+maxs <- rbind(maxs, data[data$piles == max(data$piles),])
+maxs <- rbind(maxs, data[data$kg_hab_any_recollida == max(data$kg_hab_any_recollida),])
+maxs
+
+```
+
+Primer de tot, hem agrupat les variables quantitatives segons les seves unitats de mesura, així no només comprovem outliers sinó que també podem fer estudis comparatius entre elles.
+
+Generalment, totes les variables es comporten de forma semblant, tenen el bigoti superior més allargat que l'inferior i només tenen valors extrems en el costat superior de la caixa, exceptuant la mètrica kg_hab_any.
+
+Addicionalment, hem detectat en diferents variables un valor màxim significativament alt comparant amb la resta de registres, així doncs, hem mostrat aquests registres per poder detectar si es tractava d'un error o eren dades legítimes. Finalment, hem conclòs que aquests registres tenien sentit i els contemplarem dins la mostra a estudiar.
+
+Per altra banda, hem vist un valor mínim negatiu de tones d'envasos anuals per càpita, la qual cosa no té sentit, considerem aquest registre com a valor perdut i no el tindrem en compte en l'estudi.
+
+
+# 4. Anàlisi de les dades
+
+### 4.1 Selecció dels grups de dades que es volen analitzar/comparar (planificació dels anàlisis a aplicar)
+
+Com ja hem comentat en el primer apartat 'Descripció del dataset', un dels objectius d'aquest estudi és avaluar l'eficàcia del mètode porta a porta.
+Per fer-ho, hem dividit la mostra en dos subgrups: Pobles PaP, utilitzen el mètode de recollida porta a porta en tot el municipi, i Pobles No Pap, no utilitzen cap recollida porta a porta. 
+En aquests subgrups realitzarem un test sobre la mitjana de proporció de recollida selectiva respecte la total.
+
+Per altra banda, dividirem la mostra en dos subgrups diferents: pobles petits i pobles grans. Per aquests subgrups farem un contrast de mitjanes sobre quins tipus de poble generen més residus de recollida selectiva per càpita i any. 
+A més a més, crearem models de regressió lineal multidimensional per explicar la variable 'kg_hab_any_recollida' i finalment, veurem gràficament quins tipus de residus generen més els pobles petits i els pobles grans de forma comparativa.
+
+```{r}
+poblesPetits <- data[which(data$Població < 5000),]
+poblesGrans <- data[which(data$Població >= 5000),]
+
+poblesPaP <- data[which(data$percentatge_poblacio_pap == 100 ),]
+poblesNoPaP <- data[which(data$percentatge_poblacio_pap == 0 ),]
+
+c(nrow(poblesPetits),nrow(poblesGrans),nrow(poblesPaP),nrow(poblesNoPaP))
+```
+
+### 4.2 Comprovació de la normalitat i homogeneïtat de la variància.
+
+En aquest apartat, hem de comprovar la normalitat i la homogeneïtat de la variància per les dues variables d'interès: 'kg_hab_any_recollida' i 'proporcio' per tots els grups que hem generat en l'apartat anterior.
+
+Per tant, hem creat una funció per analitzar la normalitat visualment i seguidament hem aplicat els tests per poder comprovar aquestes propietats numèricament.
+
+```{r}
+library(normtest)
+library(nortest)
+
+histogramaNormalitat <- function(r, h) {
+  xfit <- seq(min(r), max(r), length = 40) 
+  yfit <- dnorm(xfit, mean = mean(r), sd = sd(r)) 
+  yfit <- yfit * diff(h$mids[1:2]) * length(r) 
+  return (lines(xfit, yfit, col = "black", lwd = 2))
+}
+
+histogramaNormalitat(poblesPetits$kg_hab_any_recollida[poblesPetits$kg_hab_any_recollida < 500], 
+                     hist(poblesPetits$kg_hab_any_recollida[poblesPetits$kg_hab_any_recollida < 500],
+                     breaks = 100, main = "Histograma de kg_hab_any_recollida en pobles petits"))
+histogramaNormalitat(poblesGrans$kg_hab_any_recollida[poblesGrans$kg_hab_any_recollida < 600], 
+                     hist(poblesGrans$kg_hab_any_recollida[poblesGrans$kg_hab_any_recollida < 600],
+                     breaks = 100, main = "Histograma de kg_hab_any_recollida en pobles grans"))
+
+histogramaNormalitat(poblesPaP$proporcio, 
+                     hist(poblesPaP$proporcio,
+                     breaks = 100, main = "Histograma de kg_hab_any_recollida en pobles PaP"))
+histogramaNormalitat(poblesNoPaP$proporcio, 
+                     hist(poblesNoPaP$proporcio,
+                     breaks = 100, main = "Histograma de kg_hab_any_recollida en pobles No Pap"))
+
+lillie.test(poblesPetits$kg_hab_any_recollida)
+lillie.test(poblesGrans$kg_hab_any_recollida)
+lillie.test(poblesPaP$proporcio)
+lillie.test(poblesNoPaP$proporcio)
+```
+
+Tot i que a primera vista algun histograma podia semblar que seguia una distribució normal, ho refutem mitjançant el test de Lilliefors ja que el p-value és inferior a 0.05 per tant rebutgem la hipòtesi nul·la de normalitat. 
+
+No obstant, en conseqüència de la grandària de la mostra, podem aplicar el Teorema del Límit Central i suposa normalitat.
+
+```{r}
+# Test de Homoscedasticitat de la variància
+var.test(poblesPetits$kg_hab_any_recollida, poblesGrans$kg_hab_any_recollida)
+var.test(poblesPaP$proporcio, poblesNoPaP$proporcio)
+```
+
+Seguidament, hem aplicat el test de homoscedasticitat de la variància i hem arribat a diferents conclusions:
+
+Primer de tot, en la divisió de la mostra en pobles petits i pobles grans, el test per la variable 'kg_hab_any_recollida' concloem que hi ha heteroscedasticitat ja que el p-value és inferior a 0.05 i per tant rebutgem la hipòtesi nul·la d'igualtat de variàncies.
+
+En canvi, en la divisió de la mostra en pobles porta a porta i pobles no porta a porta, el test per la variable 'proporcio' concloem que hi ha homoscedasticitat ja que el p-value és superior a 0.05 i no podem rebutjar la hipòtesi nul·la.
+
+Aquests resultats son necessaris per poder aplicar els tests estadístics correctament.
+
+### 4.3 Aplicació de proves estadístiques per comparar els grups de dades.
+
+En aquest apartat, primerament volem contrastar les nostres suposicions inicials. 
+
+Per un banda, pensem que els pobles amb la gestió de recollida selectiva porta a porta és més eficaç que la recollida selectiva de vorera tradicional. 
+
+$$
+  H_0: \mu_\text{PaP} = \mu_\text{NoPaP} 
+$$
+$$ 
+  H_1: \mu_\text{PaP} > \mu_\text{NoPaP} 
+$$
+Per realitzar aquest contrast, aplicarem el test de la t-Student a la variable 'proporcio' comentada anteriorment ja que la variància és desconeguda, com hem definit les hipòtesis l'alternative és "greater" i finalment, com podem veure en l'apartat anterior hi ha homoscedasticitat.
+
+```{r}
+t.test(x=poblesPaP$proporcio, y=poblesNoPaP$proporcio, alternative= "greater", 
+       var.equal = TRUE)
+```
+
+Com que p-value és inferior a 0.05, hem de rebutjar la hipòtesi nul·la i per tant, la nostra suposició era correcta perquè acabem de veure que la mitjana de proporció de recollida selectiva respecte el total en els pobles amb mètode porta a porta és superior que en els pobles amb el mètode tradicional.
+
+Per altra banda, com ja hem comentat en l'apartat 4.1, trobem interessant la comparativa de 'kg_hab_any_recollida' entre pobles grans i pobles petits. 
+Així doncs, definim aquest contrast d'hipòtesis on creiem que es genera més residus de recollida selectiva per càpita i any en pobles grans que en els pobles petits:
+
+$$
+  H_0: \mu_\text{grans} = \mu_\text{petits} 
+$$
+$$ 
+  H_1: \mu_\text{grans} > \mu_\text{petits} 
+$$
+
+Per poder realitzar aquest contrast, aplicarem el test t-Student ja que la variància és desconeguda, l'alternative serà "greater" per definició del contrast d'hipòtesis i finalment, com hem pogut veure en l'apartat anterior, hi ha heteroscedasticitat.
+
+```{r}
+t.test(x=poblesGrans$kg_hab_any_recollida, y=poblesPetits$kg_hab_any_recollida, alternative = "greater", 
+       var.equal = FALSE)
+```
+
+Com que p-value és inferior a 0.05, hem de rebutjar la hipòtesi nul·la i per tant, la nostra suposició era correcta perquè acabem de veure que la mitjana de residus de recollida per habitant i any és superior en pobles grans que en pobles petits.
+
+FALTA EXPLICAR TOTA LA PART DE LES REGRESSIONS LINEALS MULTIDIMENSIONALS
+```{r}
+data$Any <- as.factor(data$Any)
+
+lineal <- lm(kg_hab_any_recollida ~ Any + Població + Comarca + percentatge_poblacio_pap, data = data)
+lineal.summary <- summary(lineal)
+lineal.summary
+
+lineal_petits <- lm(kg_hab_any_recollida ~ Any + Població + Comarca + percentatge_poblacio_pap, 
+                    data = poblesPetits)
+
+lineal_petits.summary <- summary(lineal_petits)
+lineal_petits.summary
+
+lineal_grans <- lm(kg_hab_any_recollida ~ Any + Població + Comarca + percentatge_poblacio_pap, 
+                   data = poblesGrans)
+
+lineal_grans <- summary(lineal_grans)
+lineal_grans
+
+#table(data$percentatge_poblacio_pap)
+#table(poblesPetits$percentatge_poblacio_pap)
+#table(poblesGrans$percentatge_poblacio_pap)
+```
+
+En els tests de comparació de mitjanes, veiem si la diferència és significativa. En canvi, al fer la regressió lineal fem un model que intenti explicar els valors de kg_hab_any_recollida per a cada conjunt, però aquest pot ser diferent i diverses variables poden afectar més o menys en cada grup.
+
+# 5. Representació dels resultats a partir de taules i gràfiques
+
+```{r warning=FALSE}
+library(ggplot2)
+
+dataPlotTamanys <- rbind(poblesPetits, poblesGrans)
+
+tamany <- (dataPlotTamanys$Població >= 5000)
+dataPlotTamanys$Tamany <- as.factor(ifelse(tamany==TRUE, "Gran", "Petit"))
+
+ggplot(data = dataPlotTamanys, aes(x = Tamany, y = kg_hab_any_recollida, colour = Tamany)) +
+  geom_boxplot() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "none")
+
+dataPlot <- rbind(poblesPaP, poblesNoPaP)
+
+Mètode <- (dataPlot$percentatge_poblacio_pap == 100)
+dataPlot$Mètode <- as.factor(ifelse(Mètode==TRUE, "PaP", "No PaP"))
+
+ggplot(data = dataPlot, aes(x = Mètode, y = proporcio, colour = Mètode)) +
+  geom_boxplot() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "none")
+
+# create a dataset
+specie <- c(rep("Petits" , 3) , rep("Grans" , 3) )
+condition <- rep(c("vidre" , "paper i cartró" , "envasos") , 2)
+value <- c(mean(poblesPetits$vidre), mean(poblesPetits$paper_cartro), 
+           mean(poblesPetits$envasos),
+           mean(poblesGrans$vidre), mean(poblesGrans$paper_cartro), 
+           mean(poblesGrans$envasos))
+
+dataToPlot <- data.frame(specie,condition,value)
+ 
+# Stacked + percent
+ggplot(dataToPlot, aes(fill=condition, y=value, x=specie)) + 
+    geom_bar(position="fill", stat="identity") +
+    xlab("Tamany") +
+    ylab("Residus") +
+    labs(fill = "Tipus residu")
+
+print("Taula de percentages (vidre, paper i cartró, envasos):")
+print("Pobles petits:")
+prop.table(c(mean(poblesPetits$vidre), mean(poblesPetits$paper_cartro), 
+           mean(poblesPetits$envasos)))
+print("Pobles grans:")
+prop.table(c(mean(poblesGrans$vidre), mean(poblesGrans$paper_cartro), 
+           mean(poblesGrans$envasos)))
+
+   
+```
+
+# 6. Resolució del problema
+
+# 7. Contribucions
+En la seguent taula apareixen les firmes dels participants conforme han contribuït en tots els àmbits del projecte.
+\begin{table}[h]
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Contribucions}    & \textbf{Firma} \\ \hline
+Investigació prèvia       & GB, BA         \\ \hline
+Redacció de les respostes & GB, BA         \\ \hline
+Desenvolupament codi      & GB, BA         \\ \hline
+\end{tabular}
+\end{table}
+
