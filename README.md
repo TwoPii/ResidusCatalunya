@@ -1,7 +1,9 @@
 # Residus Catalunya
 
 ## Introducció
-Aquest repositori conté tots els arxius relacionats amb la PRA2 de l'assignatura de Tipologia i Cicle de vida de les dades, de l'Universitat Oberta de Catalunya, realitzada per els alumnes Bernat Armengol i Genís Bosch.
+Aquest repositori conté tots els arxius relacionats amb la PRA2 de l'assignatura de Tipologia i Cicle de vida de les dades, de l'Universitat Oberta de Catalunya, realitzada per els alumnes:
+* Armengol Vall, Bernat
+* Bosch Pou, Genís
 
 ## Fitxers
 Aquest projecte ha estat realitzat amb R, per el que es pot trobar el codi en el fitxer "ResidusCatalunya.Rmd".
