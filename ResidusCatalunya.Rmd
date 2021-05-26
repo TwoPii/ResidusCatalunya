@@ -1,5 +1,5 @@
 ---
-title: "Residus Catalunya"
+title: "PRA2: Residus Catalunya"
 author: "Genís Bosch, Bernat Armengol"
 date: "5/10/2021"
 output:
@@ -286,9 +286,18 @@ t.test(x=poblesGrans$kg_hab_any_recollida, y=poblesPetits$kg_hab_any_recollida, 
 
 Com que p-value és inferior a 0.05, hem de rebutjar la hipòtesi nul·la i per tant, la nostra suposició era correcta perquè acabem de veure que la mitjana de residus de recollida per habitant i any és superior en pobles grans que en pobles petits.
 
-FALTA EXPLICAR TOTA LA PART DE LES REGRESSIONS LINEALS MULTIDIMENSIONALS
+Així doncs, obtenint aquest resultat, trobem interessant intentar explicar la variable 'kg_hab_any_recollida' mitjançant models de regressió lineal multidimensionals. 
+
+Per fer-ho, crearem 3 models: el primer estudiarem totes les poblacions de la mostra, en el segon estudiarem el subgrup de poblacions petites i en el darrer estudiarem el subgrup de poblacions grans. 
+
+Com ja hem dit, ho hem cregut oportú en conseqüència dels resultats del contrast d'hipòtesis de les mitjanes.
+
+Per altra banda, a l'hora d'escollir les variables explicatives hem intentat prevenir la col·linealitat. Per això, hem desestimat explicar la variable en qüestió mitjançant les mètriques: 'paper_cartro', 'vidre', 'envasos', 'piles', 'rs_rm', 'suma_fraccio_resta' i 'kg_hab_any'.
+
 ```{r}
 data$Any <- as.factor(data$Any)
+poblesPetits$Any <- as.factor(poblesPetits$Any)
+poblesGrans$Any <- as.factor(poblesGrans$Any)
 
 lineal <- lm(kg_hab_any_recollida ~ Any + Població + Comarca + percentatge_poblacio_pap, data = data)
 lineal.summary <- summary(lineal)
@@ -306,14 +315,20 @@ lineal_grans <- lm(kg_hab_any_recollida ~ Any + Població + Comarca + percentatg
 lineal_grans <- summary(lineal_grans)
 lineal_grans
 
-#table(data$percentatge_poblacio_pap)
-#table(poblesPetits$percentatge_poblacio_pap)
-#table(poblesGrans$percentatge_poblacio_pap)
 ```
 
-En els tests de comparació de mitjanes, veiem si la diferència és significativa. En canvi, al fer la regressió lineal fem un model que intenti explicar els valors de kg_hab_any_recollida per a cada conjunt, però aquest pot ser diferent i diverses variables poden afectar més o menys en cada grup.
+La primera gran conclusió que podem extreure és que la qualitat del model és millor quan separem els pobles petits i grans comparat amb tota la mostra conjunta, ja que el coeficient de determinació ajustat és més elevat en els dos models separats, la qual cosa coincideix amb les conclusions extretes anteriorment.
+
+En segon lloc, veiem que hi ha variables explicatives que no son significatives ja que el p-value és superior al nivell de significació $\alpha$ = 0.05, per tant, no podríem extreure conclusions dels coeficients estimats d'aquestes variables. Per exemple, la Comarca Urgell o la Població en el model conjunt.
+
+No obstant, hi ha altres variables que ens aporten conclusions molt visiblement les quals son molt esperançadores: la variable categòrica 'Any' en els 3 models podem apreciar com a mesura que han avançat els anys, els kgs de recollida selectiva per càpita i any també augmenten. 
+
+Finalment, ens agradaria recalcar que per fer un estudi més exhaustiu, s'analitzaria model per model veient les variables explicatives significatives i s'aniria ajustant el nombre de variables, d'aquesta manera s'aconseguiria models més bondadosos que ens permetrien fer prediccions més acurades.
 
 # 5. Representació dels resultats a partir de taules i gràfiques
+Ens proposem ara mostrar, amb diferents gràfiques, una síntesi de l'estudi realitzat. Per a representar la comparació de les mitjanes entre dos grups, com és el cas de dos dels estudis que hem realitzat, mostrem un boxplot en el que apareixin dues columnes, una per cada grup estudiat.
+
+Així, podem veure la primera comparació de mitjanes entre els municipis petits (de menys de 5000 habitants) i els municipis grans, de més de 5000 habitats, per a la variable kg_hab_any_recollida.
 
 ```{r warning=FALSE}
 library(ggplot2)
@@ -328,7 +343,11 @@ ggplot(data = dataPlotTamanys, aes(x = Tamany, y = kg_hab_any_recollida, colour 
   geom_point() +
   theme_bw() +
   theme(legend.position = "none")
+```
+Veiem que aquests resultats demostren, de forma visual i per tant no amb la precisió de l'estudi previ, que els municipis petits i els municpis grans tenen una mitjana semblant de quilograms per habitant i per any de recollida selectiva.
 
+Així mateix, amb un boxplot molt semblant, podem intentar apreciar les diferències (o igualtats) entre les mitjanes de proporció, que determina quin percentatge dels residus totals de cada municipi provenen de recollida selectiva, per als pobles amb mètode de recollida Porta a Porta i els que no.
+```{r}
 dataPlot <- rbind(poblesPaP, poblesNoPaP)
 
 Mètode <- (dataPlot$percentatge_poblacio_pap == 100)
@@ -339,7 +358,11 @@ ggplot(data = dataPlot, aes(x = Mètode, y = proporcio, colour = Mètode)) +
   geom_point() +
   theme_bw() +
   theme(legend.position = "none")
+```
+En aquest boxplot podem apreciar una diferència més substancial entre les mitjanes de les proporcions de residus que son recollits de forma selectiva entre els pobles amb recollida Porta a Porta i els que no, ja com ja probavem de forma més precisa en l'estudi.
 
+Finalment, per a tenir una idea de la distribuÏció dels tipus de residus en municipis grans i petits, i veure si hi ha diferències, decidim mostrar un gràfic tipus "stacked percent bar chart" amb dues columnes, i en cada una d'elles, les distribuïcions de vidre, paper i cartró i envasos.
+```{r}
 # create a dataset
 specie <- c(rep("Petits" , 3) , rep("Grans" , 3) )
 condition <- rep(c("vidre" , "paper i cartró" , "envasos") , 2)
@@ -356,19 +379,39 @@ ggplot(dataToPlot, aes(fill=condition, y=value, x=specie)) +
     xlab("Tamany") +
     ylab("Residus") +
     labs(fill = "Tipus residu")
+```
+En aquesta gràfica, veiem lleugeres diferències entre els municpis grans i petits, com en la proporció de vidre dins dels residus o la d'envasos. Ens fixem que els pobles petits tenen un consum inferior d'envasos, que pot ser explicat per l'èxistència de menys supermercats i més comerç pròxim, que no utilitza tants envasos, mentre que hi ha més proporció de vidre respecte als pobles grans.
 
-print("Taula de percentages (vidre, paper i cartró, envasos):")
-print("Pobles petits:")
+Per a veure les xifres exactes, podem calcular les proporcions amb prop.table.
+
+**Taula de percentages (vidre, paper i cartró, envasos)**
+
+**Pobles petits:**
+```{r warning=FALSE}
 prop.table(c(mean(poblesPetits$vidre), mean(poblesPetits$paper_cartro), 
            mean(poblesPetits$envasos)))
-print("Pobles grans:")
+```
+
+**Pobles grans:**
+```{r warning=FALSE}
 prop.table(c(mean(poblesGrans$vidre), mean(poblesGrans$paper_cartro), 
            mean(poblesGrans$envasos)))
 
-   
 ```
 
 # 6. Resolució del problema
+
+Les principals preguntes que volíem respondre bàsicament son: si el mètode porta a porta era més efectiu en la recollida selectiva que el mètode tradicional de vorera i, per altre costat, fer un anàlisi comparatiu entre la recollida selectiva en pobles petits i pobles grans.
+
+En primer lloc, hem conclòs que el mètode porta a porta era millor mètode que el tradicional mitjançant un test sobre la mitjana de la variable 'proporcio' de les dues mostres independents i, addicionalment, ho hem corroborat gràficament amb el boxplot en l'exercici 5.
+
+Per altra banda, per dur a terme l'estudi entre pobles petits i pobles grans, primerament hem realitzat un test sobre la mitjana de la variable 'kg_hab_any_recollida' entre aquestes mostres on hem pogut concloure que es generen de mitjana més kgs de recollida selectiva per càpita any en pobles grans que en pobles petits. 
+A més a més, aquest fet l'hem corroborat mitjançant el boxplot de l'exercici 5 i amb els 3 models de regressió lineal creats en l'exercici 4, on també hem pogut concloure que en qualsevol tipus de poble, és a dir, independentment de grans i petits, cada any s'ha generat més residus de recollida selectiva per habitant any. 
+
+D'aquest resultat hem tret dos conclusions: cada vegada generem més residus per habitant però també, al mateix temps, cada vegada reciclem més.
+
+Finalment, per acabar aquest estudi entre pobles grans i petits, hem creat un gràfic de barres i les corresponents taules on mostravem les diferències entre les proporcions dels tipus de residus. Veiem que en els pobles petits hi ha un ús més gran del vidre, mentre que en pobles grans és l'envas el predominant. Pel què fa al paper i cartró, les proporcions eren molt semblants, pel que podem entendre que el reciclatge que s'en fa és semblant en pobles petits i grans, i per tant, aquest tipus de residu no depèn del tamany del poble sinó d'altres possibles factors.
+
 
 # 7. Contribucions
 En la seguent taula apareixen les firmes dels participants conforme han contribuït en tots els àmbits del projecte.
