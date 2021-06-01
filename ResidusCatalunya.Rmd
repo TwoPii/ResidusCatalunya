@@ -58,6 +58,8 @@ Aprofitem també per a reduir la informació de la fracció de residus que es re
 
 ```{r warning=FALSE}
 library(stringr)
+library(dplyr)
+
 data$X..població.servida.amb.el.PaP <- as.numeric(data$X..població.servida.amb.el.PaP)
 
 for (i in 1:nrow(data)) {
@@ -84,7 +86,7 @@ for (i in 1:nrow(data)) {
 
 data$Piles <- as.numeric(gsub(",", ".", data$Piles))
 
-#head(data)
+glimpse(data)
 ```
 
 Decidim utilitzar les dimensions Municipi, Any, Comarca, Població i Percentatge de Població amb Porta a Porta (PaP per a descriure les files i poder fer les seleccions dels grups, i com a mètriques d'interès ens quedem amb les tones de residus de paper i cartró, vidre, envasos i piles obtingudes anualment, així com els kg de residus per habitant i per any de recollida selectiva, els kg de residus per habitant i per any totals, la proporció de residus de recollida selectiva sobre recollida total, el total en tones de residus restants no recollits selectivament, el model de recollida selectiva i les fraccions (materials) que es recullen amb el servei Porta a Porta(en cas de tenir-lo).
@@ -125,7 +127,7 @@ data <- data[which(!(data$Municipi == "No Territorialitzable")),]
 data$proporcio <- data$kg_hab_any_recollida/data$kg_hab_any
 data <- data[which(!is.na(data$proporcio)),]
 
-head(data)
+str(data)
 ```
 
 ### 3.2 Identificació i tractament de valors extrems
@@ -195,7 +197,7 @@ c(nrow(poblesPetits),nrow(poblesGrans),nrow(poblesPaP),nrow(poblesNoPaP))
 
 En aquest apartat, hem de comprovar la normalitat i la homogeneïtat de la variància per les dues variables d'interès: 'kg_hab_any_recollida' i 'proporcio' per tots els grups que hem generat en l'apartat anterior.
 
-Per tant, hem creat una funció per analitzar la normalitat visualment i seguidament hem aplicat els tests per poder comprovar aquestes propietats numèricament.
+Per tant, hem creat una funció per analitzar la normalitat visualment i seguidament hem aplicat els tests per poder comprovar aquestes propietats numèricament. A més a més, hem creat unes gràfiques tipus QQ-plot per a visualitzar les diferències respecte la distribució normal.
 
 ```{r}
 library(normtest)
@@ -226,9 +228,22 @@ lillie.test(poblesPetits$kg_hab_any_recollida)
 lillie.test(poblesGrans$kg_hab_any_recollida)
 lillie.test(poblesPaP$proporcio)
 lillie.test(poblesNoPaP$proporcio)
+
+#QQ plots
+qqnorm(poblesGrans$kg_hab_any_recollida)
+qqline(poblesGrans$kg_hab_any_recollida)
+
+qqnorm(poblesPetits$kg_hab_any_recollida)
+qqline(poblesPetits$kg_hab_any_recollida)
+
+qqnorm(poblesPaP$proporcio)
+qqline(poblesPaP$proporcio)
+
+qqnorm(poblesNoPaP$proporcio)
+qqline(poblesNoPaP$proporcio)
 ```
 
-Tot i que a primera vista algun histograma podia semblar que seguia una distribució normal, ho refutem mitjançant el test de Lilliefors ja que el p-value és inferior a 0.05 per tant rebutgem la hipòtesi nul·la de normalitat. 
+Tot i que a primera vista algun histograma podia semblar que seguia una distribució normal, ho refutem mitjançant el test de Lilliefors ja que el p-value és inferior a 0.05 per tant rebutgem la hipòtesi nul·la de normalitat. Addicionalment, en les gràfiques QQ-plot podem apreciar suficient desviació respecte la normalitat i per tant, concloure que no es tracta de distribució normal.
 
 No obstant, en conseqüència de la grandària de la mostra, podem aplicar el Teorema del Límit Central i suposa normalitat.
 
